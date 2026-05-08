@@ -145,6 +145,10 @@
     // AI (Hugging Face)
     extractSkills: function (text) {
       return request('POST', '/ai/skills/extract', { body: { text: text } });
+    },
+    matchScore: function (payload) {
+      // payload: { cvText: string, jobs: [{ id, title?, description, requirements? }] }
+      return request('POST', '/ai/match', { body: payload });
     }
   };
 

@@ -1069,6 +1069,30 @@
                     </div>
                 </div>
 
+                <!-- Hugging Face: CV-to-jobs semantic match (sentence-transformers/all-MiniLM-L6-v2) -->
+                <div class="glass-card" style="margin-bottom:var(--space-8);">
+                    <p class="label-text text-accent" style="margin-bottom:var(--space-3);">
+                        <ph-sparkle weight="fill" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                        Score these jobs against my CV
+                    </p>
+                    <p class="caption" style="margin-bottom:var(--space-3);">
+                        Paste a CV excerpt — Hugging Face semantic similarity (<code style="font-family:var(--font-mono);font-size:0.85em;">all-MiniLM-L6-v2</code>) returns a 0–100 match score plus the requirements you don't mention yet.
+                    </p>
+                    <textarea id="match-cv-input"
+                        aria-label="CV text for match scoring"
+                        placeholder="e.g. 5 years building React + Node.js apps, CI/CD with GitHub Actions, comfortable with PostgreSQL and AWS."
+                        rows="3"
+                        style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:var(--space-3);color:var(--text-main);font-family:var(--font-sans);font-size:var(--text-sm);resize:vertical;margin-bottom:var(--space-3);"></textarea>
+                    <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;">
+                        <button id="match-run-btn" class="btn btn-primary" type="button" onclick="runMatchScoring()">
+                            <ph-sparkle weight="bold" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                            Score Jobs
+                        </button>
+                        <button id="match-clear-btn" class="btn" type="button" onclick="clearMatchScores()" style="background:rgba(255,255,255,0.06);color:var(--text-main);">Clear</button>
+                        <span id="match-run-status" class="caption" role="status" aria-live="polite"></span>
+                    </div>
+                </div>
+
                 <!-- Phase 3: Skeleton loaders shown briefly, then real cards -->
                 <div class="grid-layout grid-3" id="job-grid-skeleton" aria-hidden="true">
                     <div class="skeleton skeleton-card"></div>
@@ -1614,9 +1638,9 @@
             history.replaceState(null, '', hash);
 
             // View-specific triggers
-            if (viewId === 'seeker-dash') { populateSkills(); animateCounters(); }
+            if (viewId === 'seeker-dash') { populateSkills(); animateCounters(); _restoreCvText(); }
             if (viewId === 'admin-dash') animateCounters();
-            if (viewId === 'job-board') showJobsWithSkeleton();
+            if (viewId === 'job-board') { showJobsWithSkeleton(); _restoreCvText(); }
         }
 
         // Handle back/forward + direct URL load
@@ -1696,6 +1720,10 @@
                 .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
+        // Holds the latest match-scoring result keyed by job id, so re-rendering
+        // (e.g. after sort) preserves the badges. Cleared by clearMatchScores().
+        const _matchByJobId = Object.create(null);
+
         function renderJobCard(job) {
             const id = escapeHtml(job._id || job.id || '');
             const title = escapeHtml(job.title);
@@ -1704,23 +1732,44 @@
             const type = escapeHtml(job.type || 'full-time');
             const category = escapeHtml(job.category || 'Engineering');
             const seed = encodeURIComponent(job.company || 'job');
+            const match = _matchByJobId[job._id || job.id || ''];
+            const ariaSuffix = match ? (' \u2014 ' + match.score + '% match') : '';
+            const matchHtml = match ? [
+                '  <div class="progress-track" style="margin-top:var(--space-6);">',
+                '    <div class="progress-fill" style="width:', match.score, '%;"></div>',
+                '  </div>',
+                '  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-2);">',
+                '    <span class="caption">AI Match (HF semantic)</span>',
+                '    <span style="font-size:var(--text-sm);font-weight:700;color:var(--accent);">', match.score, '%</span>',
+                '  </div>',
+                match.missing && match.missing.length
+                  ? '  <p class="caption" style="margin-top:var(--space-2);">Missing: ' + match.missing.map(escapeHtml).join(', ') + '</p>'
+                  : ''
+            ].join('') : '';
             return [
                 '<article class="glass-card job-card" role="button" tabindex="0"',
                 '  data-job-id="', id, '"',
-                '  aria-label="', title, ' at ', company, '"',
+                '  aria-label="', title, ' at ', company, ariaSuffix, '"',
                 '  onclick="openJobModal()" onkeydown="if(event.key===\'Enter\')openJobModal()">',
                 '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">',
                 '    <img src="https://picsum.photos/seed/', seed, '/40/40" alt="', company, ' logo" width="40" height="40" style="border-radius:10px;">',
-                '    <span class="badge badge-teal">', type, '</span>',
+                match
+                  ? '    <span class="badge badge-gold">' + match.score + '% Match</span>'
+                  : '    <span class="badge badge-teal">' + type + '</span>',
                 '  </div>',
                 '  <h3 class="card-title" style="margin-bottom:var(--space-1);">', title, '</h3>',
                 '  <p class="caption" style="margin-bottom:var(--space-4);">', company, ' &bull; ', location, '</p>',
                 '  <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">',
                 '    <span class="badge badge-indigo">', category, '</span>',
                 '  </div>',
+                matchHtml,
                 '</article>'
             ].join('');
         }
+
+        // Holds the most recent fetched jobs so the match button can re-use
+        // them without an extra GET /api/jobs round-trip.
+        let _lastJobs = [];
 
         async function showJobsWithSkeleton() {
             const skeleton = document.getElementById('job-grid-skeleton');
@@ -1732,6 +1781,7 @@
             try {
                 const res = await api.getJobs({ limit: 12 });
                 const jobs = (res && res.data && res.data.jobs) || [];
+                _lastJobs = jobs;
                 grid.innerHTML = jobs.length
                     ? jobs.map(renderJobCard).join('')
                     : '<p class="caption" style="grid-column:1/-1;text-align:center;">No active jobs yet — check back soon.</p>';
@@ -1745,6 +1795,93 @@
                 skeleton.style.display = 'none';
                 grid.style.display = 'grid';
             }
+        }
+
+        // ── AI Match Scoring: paste CV text → POST /api/ai/match ──
+        // Re-renders the loaded job cards with a "X% Match" badge driven by
+        // Hugging Face semantic similarity, plus a "Missing:" caption listing
+        // the requirements not covered by the CV.
+        const CV_TEXT_KEY = 'giu-nexus.cv-text';
+
+        function _restoreCvText() {
+            try {
+                const stored = window.localStorage.getItem(CV_TEXT_KEY);
+                if (!stored) return;
+                const t1 = document.getElementById('match-cv-input');
+                const t2 = document.getElementById('skill-extract-input');
+                if (t1 && !t1.value) t1.value = stored;
+                if (t2 && !t2.value) t2.value = stored;
+            } catch (_e) { /* localStorage may be disabled in some contexts */ }
+        }
+
+        function _persistCvText(text) {
+            try { window.localStorage.setItem(CV_TEXT_KEY, text); } catch (_e) { /* noop */ }
+        }
+
+        async function runMatchScoring() {
+            const ta = document.getElementById('match-cv-input');
+            const status = document.getElementById('match-run-status');
+            const btn = document.getElementById('match-run-btn');
+            const grid = document.getElementById('job-grid');
+            if (!ta || !status || !btn || !grid) return;
+            const cvText = (ta.value || '').trim();
+            if (!cvText) {
+                status.textContent = 'Paste CV text first.';
+                status.style.color = 'var(--accent)';
+                return;
+            }
+            if (!_lastJobs || _lastJobs.length === 0) {
+                status.textContent = 'No jobs loaded — try refreshing.';
+                status.style.color = 'var(--accent)';
+                return;
+            }
+            _persistCvText(cvText);
+            btn.disabled = true;
+            const orig = btn.innerHTML;
+            btn.innerHTML = 'Scoring…';
+            status.textContent = 'Calling Hugging Face…';
+            status.style.color = 'var(--text-soft, rgba(241,245,249,0.7))';
+            try {
+                const payload = {
+                    cvText: cvText,
+                    jobs: _lastJobs.slice(0, 20).map((j) => ({
+                        id: j._id || j.id,
+                        title: j.title || '',
+                        description: j.description || j.title || '',
+                        requirements: Array.isArray(j.requirements) ? j.requirements : []
+                    }))
+                };
+                const res = await window.api.matchScore(payload);
+                const data = (res && res.data) || {};
+                const matches = Array.isArray(data.matches) ? data.matches : [];
+                for (const key of Object.keys(_matchByJobId)) delete _matchByJobId[key];
+                matches.forEach((m) => {
+                    _matchByJobId[String(m.jobId)] = {
+                        score: m.score,
+                        missing: Array.isArray(m.missingRequirements) ? m.missingRequirements : []
+                    };
+                });
+                grid.innerHTML = _lastJobs.map(renderJobCard).join('');
+                const label = data.source === 'huggingface'
+                    ? `Scored ${matches.length} job${matches.length === 1 ? '' : 's'} via ${data.model || 'Hugging Face'}.`
+                    : `Scored ${matches.length} job${matches.length === 1 ? '' : 's'} (Jaccard fallback — HF unavailable).`;
+                status.textContent = label;
+                status.style.color = data.source === 'huggingface' ? 'var(--accent)' : 'var(--text-soft, rgba(241,245,249,0.7))';
+            } catch (err) {
+                status.textContent = 'Match scoring failed: ' + (err && err.message ? err.message : 'unknown error');
+                status.style.color = '#f87171';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = orig;
+            }
+        }
+
+        function clearMatchScores() {
+            const grid = document.getElementById('job-grid');
+            const status = document.getElementById('match-run-status');
+            for (const key of Object.keys(_matchByJobId)) delete _matchByJobId[key];
+            if (grid && _lastJobs.length) grid.innerHTML = _lastJobs.map(renderJobCard).join('');
+            if (status) { status.textContent = ''; status.style.color = ''; }
         }
 
         // ── AI Skill Extract: paste CV text → POST /api/ai/skills/extract ──
@@ -1791,6 +1928,7 @@
                 status.style.color = 'var(--accent)';
                 return;
             }
+            _persistCvText(text);
             btn.disabled = true;
             const origLabel = btn.innerHTML;
             btn.innerHTML = 'Extracting…';

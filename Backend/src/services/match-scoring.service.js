@@ -79,9 +79,11 @@ async function scoreCvAgainstJobs(cvText, jobs) {
 
   // Try HF semantic similarity first.
   try {
-    const out = await infer(PRIMARY_MODEL, {
-      inputs: { source_sentence: cvText, sentences }
-    });
+    const out = await infer(
+      PRIMARY_MODEL,
+      { inputs: { source_sentence: cvText, sentences } },
+      { task: HF_TASK }
+    );
     if (Array.isArray(out) && out.length === jobs.length) {
       const matches = jobs.map((job, i) => ({
         jobId: String(job.id),

@@ -45,8 +45,8 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
+// Global error handler — `next` retained for Express 4-arg signature
+app.use((err, req, res, _next) => {
   console.error(err.stack);
   const status = err.statusCode || 500;
   res.status(status).json({

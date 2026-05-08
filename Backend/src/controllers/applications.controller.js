@@ -2,7 +2,6 @@ const Application = require('../models/Application');
 const Job = require('../models/Job');
 const { extractSkills, computeMatchScore } = require('../services/ai.service');
 const { success, created, error } = require('../utils/apiResponse');
-const path = require('path');
 
 // POST /api/applications
 exports.applyToJob = async (req, res) => {

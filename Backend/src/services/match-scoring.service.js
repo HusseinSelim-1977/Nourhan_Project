@@ -1,5 +1,7 @@
 const { infer } = require('./huggingface.client');
 
+const HF_TASK = 'sentence-similarity';
+
 /**
  * CV-to-job match scoring via Hugging Face semantic similarity.
  *

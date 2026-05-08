@@ -22,12 +22,14 @@ const HEURISTIC_SKILLS = [
 ];
 
 function joinSpans(tokens, text) {
-  // tokens look like [{ entity_group?: 'SKILL', word: '##script', start, end }, ...]
-  // The newer pipeline returns `entity_group`; the older one returns per-token `entity`.
-  // We rely on `start`/`end` offsets to slice the original text precisely.
+  // tokens look like [{ entity_group?: 'SKILL'|'B'|'I', word: '##script', start, end }, ...]
+  // jjzha/jobbert_skill_extraction outputs `B` / `I` (skill begin/inside); other
+  // skill-tagging variants emit `B-SKILL` / `I-SKILL` or a plain `SKILL` group.
+  // Accept all of them.
   const skillTokens = tokens.filter((t) => {
     const label = (t.entity_group || t.entity || '').toUpperCase();
-    return label.includes('SKILL') || label === 'B-SKILL' || label === 'I-SKILL';
+    if (!label || label === 'O') return false;
+    return label === 'B' || label === 'I' || label.includes('SKILL');
   });
   if (!skillTokens.length) return [];
 

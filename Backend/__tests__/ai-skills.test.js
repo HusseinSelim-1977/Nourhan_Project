@@ -56,7 +56,7 @@ describe('POST /api/ai/skills/extract', () => {
     expect(res.body.data.skills).toEqual(['React', 'Node.js', 'Postgres']);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     const [calledUrl, calledOpts] = global.fetch.mock.calls[0];
-    expect(calledUrl).toMatch(/api-inference\.huggingface\.co\/models\//);
+    expect(calledUrl).toMatch(/router\.huggingface\.co\/hf-inference\/models\//);
     expect(JSON.parse(calledOpts.body)).toMatchObject({ inputs: text });
   });
 

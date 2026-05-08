@@ -9,7 +9,11 @@
  * `.status` and `.body` properties are populated on non-2xx responses, so
  * callers can decide whether to retry, fall back, or surface the error.
  */
-const DEFAULT_BASE = 'https://api-inference.huggingface.co';
+// Updated to the post-2025 Hugging Face Inference Providers router. The legacy
+// host `api-inference.huggingface.co/models/{name}` returns 404
+// "Cannot POST /models/..." for every model; the new path serves the same
+// hf-hosted serverless models.
+const DEFAULT_BASE = 'https://router.huggingface.co/hf-inference';
 const DEFAULT_TIMEOUT_MS = 25000;
 
 function getBaseUrl() {
@@ -24,7 +28,8 @@ async function infer(model, payload, opts = {}) {
   if (!model || typeof model !== 'string') {
     throw new Error('huggingface.infer: model name is required');
   }
-  const url = `${getBaseUrl()}/models/${model}`;
+  const taskPath = opts.task ? `/pipeline/${opts.task}` : '';
+  const url = `${getBaseUrl()}/models/${model}${taskPath}`;
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;

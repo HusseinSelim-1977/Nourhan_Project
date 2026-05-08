@@ -140,7 +140,12 @@
     getJobs: function (params) {
       return request('GET', '/jobs' + buildQuery(params));
     },
-    getJob: function (id) { return request('GET', '/jobs/' + encodeURIComponent(id)); }
+    getJob: function (id) { return request('GET', '/jobs/' + encodeURIComponent(id)); },
+
+    // AI (Hugging Face)
+    extractSkills: function (text) {
+      return request('POST', '/ai/skills/extract', { body: { text: text } });
+    }
   };
 
   global.api = api;

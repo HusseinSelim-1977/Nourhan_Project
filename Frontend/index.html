@@ -1159,6 +1159,21 @@
                                     <ph-sparkle weight="fill" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
                                     AI Skill Extract
                                 </p>
+                                <p class="caption" style="margin-bottom:var(--space-3);">
+                                    Paste the body of your CV — Hugging Face NER (<code style="font-family:var(--font-mono);font-size:0.85em;">jjzha/jobbert_skill_extraction</code>) tags every skill mention.
+                                </p>
+                                <textarea id="skill-extract-input"
+                                    aria-label="CV text for AI skill extraction"
+                                    placeholder="e.g. Built React + TypeScript dashboards on Node.js. Experience with PostgreSQL, Docker, and AWS Lambda."
+                                    rows="4"
+                                    style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:var(--space-3);color:var(--text-main);font-family:var(--font-sans);font-size:var(--text-sm);resize:vertical;margin-bottom:var(--space-3);"></textarea>
+                                <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;margin-bottom:var(--space-4);">
+                                    <button id="skill-extract-btn" class="btn btn-primary" type="button" onclick="runSkillExtraction()">
+                                        <ph-sparkle weight="bold" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                                        Extract Skills
+                                    </button>
+                                    <span id="skill-extract-status" class="caption" role="status" aria-live="polite"></span>
+                                </div>
                                 <div id="skill-container" aria-live="polite"></div>
                             </div>
                         </div>
@@ -1729,6 +1744,79 @@
             } finally {
                 skeleton.style.display = 'none';
                 grid.style.display = 'grid';
+            }
+        }
+
+        // ── AI Skill Extract: paste CV text → POST /api/ai/skills/extract ──
+        // Renders the response into #skill-container using the same .skill-chip
+        // styling the placeholder uses, so the panel shape never changes.
+        function escapeText(value) {
+            const div = document.createElement('div');
+            div.textContent = String(value == null ? '' : value);
+            return div.innerHTML;
+        }
+
+        function renderSkillChips(skills, options) {
+            const container = document.getElementById('skill-container');
+            if (!container) return;
+            container.innerHTML = '';
+            const aiMagic = !!(options && options.aiMagic);
+            (skills || []).forEach((skill, i) => {
+                const chip = document.createElement('span');
+                chip.className = `skill-chip${aiMagic ? ' ai-magic' : ''}`;
+                chip.innerHTML = escapeText(skill);
+                container.appendChild(chip);
+                const { animate } = window._motion || {};
+                const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                if (!prefersReduced && animate) {
+                    animate(chip,
+                        { opacity: [0, 1], scale: [0.85, 1] },
+                        { duration: 0.4, delay: i * 0.06, easing: [0.34, 1.56, 0.64, 1] }
+                    );
+                } else {
+                    chip.style.opacity = '1';
+                    chip.style.transform = 'scale(1)';
+                }
+            });
+        }
+
+        async function runSkillExtraction() {
+            const ta = document.getElementById('skill-extract-input');
+            const status = document.getElementById('skill-extract-status');
+            const btn = document.getElementById('skill-extract-btn');
+            if (!ta || !status || !btn) return;
+            const text = (ta.value || '').trim();
+            if (!text) {
+                status.textContent = 'Paste CV text first.';
+                status.style.color = 'var(--accent)';
+                return;
+            }
+            btn.disabled = true;
+            const origLabel = btn.innerHTML;
+            btn.innerHTML = 'Extracting…';
+            status.textContent = 'Calling Hugging Face…';
+            status.style.color = 'var(--text-soft, rgba(241,245,249,0.7))';
+            try {
+                const res = await window.api.extractSkills(text);
+                const data = (res && res.data) || {};
+                const skills = Array.isArray(data.skills) ? data.skills : [];
+                renderSkillChips(skills, { aiMagic: data.source === 'huggingface' });
+                if (skills.length === 0) {
+                    status.textContent = 'No skills detected. Try a longer or more technical excerpt.';
+                    status.style.color = 'var(--accent)';
+                } else {
+                    const label = data.source === 'huggingface'
+                        ? `Extracted ${skills.length} skill${skills.length === 1 ? '' : 's'} via ${data.model || 'Hugging Face'}.`
+                        : `Extracted ${skills.length} skill${skills.length === 1 ? '' : 's'} (heuristic fallback — HF unavailable).`;
+                    status.textContent = label;
+                    status.style.color = data.source === 'huggingface' ? 'var(--accent)' : 'var(--text-soft, rgba(241,245,249,0.7))';
+                }
+            } catch (err) {
+                status.textContent = 'Skill extraction failed: ' + (err && err.message ? err.message : 'unknown error');
+                status.style.color = '#f87171';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origLabel;
             }
         }
 

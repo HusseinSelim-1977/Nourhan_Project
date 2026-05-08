@@ -149,6 +149,12 @@
     matchScore: function (payload) {
       // payload: { cvText: string, jobs: [{ id, title?, description, requirements? }] }
       return request('POST', '/ai/match', { body: payload });
+    },
+    summarize: function (text, opts) {
+      const body = { text: text };
+      if (opts && typeof opts.minLength === 'number') body.minLength = opts.minLength;
+      if (opts && typeof opts.maxLength === 'number') body.maxLength = opts.maxLength;
+      return request('POST', '/ai/summarize', { body: body });
     }
   };
 

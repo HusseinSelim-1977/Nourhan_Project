@@ -1470,21 +1470,28 @@
             </button>
             <div class="grid-layout grid-2" style="gap:var(--space-8);">
                 <div>
-                    <h2 id="modal-job-title" style="font-size:var(--text-3xl);margin-bottom:var(--space-3);">UX Visionary</h2>
-                    <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-6);">
-                        <span class="badge badge-indigo">Design</span>
-                        <span class="badge badge-gold">$120k – $150k</span>
-                        <span class="badge badge-teal">Remote</span>
+                    <h2 id="modal-job-title" style="font-size:var(--text-3xl);margin-bottom:var(--space-3);">Job title</h2>
+                    <p id="modal-job-company" class="caption" style="margin-bottom:var(--space-3);">Company &bull; Location</p>
+                    <div id="modal-job-badges" style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-6);"></div>
+
+                    <!-- Hugging Face: AI summary expander (sshleifer/distilbart-cnn-12-6) -->
+                    <div class="glass-card" style="border-color:rgba(13,148,136,0.3);margin-bottom:var(--space-6);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+                            <p class="label-text text-accent" style="margin:0;">
+                                <ph-sparkle weight="fill" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                                AI Summary
+                            </p>
+                            <button id="modal-summary-btn" class="btn btn-primary" type="button" onclick="runJobSummarize()" style="padding:0.5rem 1rem;font-size:var(--text-sm);">Generate Summary</button>
+                        </div>
+                        <p id="modal-summary-text" class="caption" style="margin-top:var(--space-3);min-height:1em;"></p>
+                        <p id="modal-summary-source" class="caption" style="margin-top:var(--space-2);font-size:0.75rem;opacity:0.7;"></p>
                     </div>
-                    <p class="body-text text-muted" style="margin-bottom:var(--space-6);">
-                        We are looking for a visionary mind to redefine how users interact with spatial computing interfaces. You will lead the design system for our next-gen AR platform.
-                    </p>
+
+                    <h4 class="label-text" style="margin-bottom:var(--space-3);">Description</h4>
+                    <p id="modal-job-description" class="body-text text-muted" style="margin-bottom:var(--space-6);white-space:pre-wrap;"></p>
+
                     <h4 class="label-text" style="margin-bottom:var(--space-3);">Requirements</h4>
-                    <ul style="padding-left:1.2rem;display:flex;flex-direction:column;gap:var(--space-2);">
-                        <li class="caption">5+ years in Product Design</li>
-                        <li class="caption">Proficiency in 3D tools (Spline, Blender)</li>
-                        <li class="caption">Strong portfolio in motion design</li>
-                    </ul>
+                    <ul id="modal-job-requirements" style="padding-left:1.2rem;display:flex;flex-direction:column;gap:var(--space-2);"></ul>
                 </div>
                 <div>
                     <div class="glass-card" style="border-color:rgba(245,158,11,0.3);margin-bottom:var(--space-4);">
@@ -1495,13 +1502,13 @@
                         <div style="margin-bottom:var(--space-4);">
                             <div style="display:flex;justify-content:space-between;margin-bottom:var(--space-2);">
                                 <span class="caption">Profile Match</span>
-                                <span style="font-family:var(--font-serif);font-weight:700;font-size:var(--text-xl);color:var(--accent);">92%</span>
+                                <span id="modal-match-score" style="font-family:var(--font-serif);font-weight:700;font-size:var(--text-xl);color:var(--accent);">—</span>
                             </div>
-                            <div class="progress-track"><div class="progress-fill" style="width:92%;"></div></div>
+                            <div class="progress-track"><div id="modal-match-bar" class="progress-fill" style="width:0%;"></div></div>
                         </div>
                         <div>
                             <p class="label-text" style="margin-bottom:var(--space-2);">Missing Keywords</p>
-                            <p style="font-family:var(--font-sans);font-size:var(--text-sm);color:#f87171;">WebGL, React Three Fiber</p>
+                            <p id="modal-missing-keywords" style="font-family:var(--font-sans);font-size:var(--text-sm);color:#f87171;">Run match scoring to see gaps.</p>
                         </div>
                     </div>
                     <button class="btn btn-gold" style="width:100%;padding:1rem;">
@@ -1750,7 +1757,7 @@
                 '<article class="glass-card job-card" role="button" tabindex="0"',
                 '  data-job-id="', id, '"',
                 '  aria-label="', title, ' at ', company, ariaSuffix, '"',
-                '  onclick="openJobModal()" onkeydown="if(event.key===\'Enter\')openJobModal()">',
+                '  onclick="openJobModal(\'', id, '\')" onkeydown="if(event.key===\'Enter\')openJobModal(\'', id, '\')">',
                 '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">',
                 '    <img src="https://picsum.photos/seed/', seed, '/40/40" alt="', company, ' logo" width="40" height="40" style="border-radius:10px;">',
                 match
@@ -2020,18 +2027,140 @@
         }
 
         // ── Modal ──
-        function openJobModal() {
+        // Tracks which job is currently rendered in the modal so the AI
+        // Summary button knows which description to send to /api/ai/summarize.
+        let _currentModalJob = null;
+
+        function _setModalText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(value == null ? '' : value);
+        }
+
+        function _populateJobModal(job) {
+            _currentModalJob = job || null;
+            _setModalText('modal-job-title', (job && job.title) || 'Untitled role');
+            const subtitle = ((job && job.company) || '') + ((job && job.location) ? ' \u2022 ' + job.location : '');
+            _setModalText('modal-job-company', subtitle);
+            _setModalText('modal-job-description', (job && job.description) || 'No description provided.');
+
+            const badges = document.getElementById('modal-job-badges');
+            if (badges) {
+                badges.innerHTML = '';
+                const tags = [];
+                if (job && job.category) tags.push({ cls: 'badge-indigo', text: job.category });
+                if (job && job.type) tags.push({ cls: 'badge-teal', text: job.type });
+                if (job && job.salary) tags.push({ cls: 'badge-gold', text: job.salary });
+                tags.forEach((t) => {
+                    const span = document.createElement('span');
+                    span.className = 'badge ' + t.cls;
+                    span.textContent = t.text;
+                    badges.appendChild(span);
+                });
+            }
+
+            const reqList = document.getElementById('modal-job-requirements');
+            if (reqList) {
+                reqList.innerHTML = '';
+                const reqs = (job && Array.isArray(job.requirements)) ? job.requirements : [];
+                if (reqs.length === 0) {
+                    const li = document.createElement('li');
+                    li.className = 'caption';
+                    li.textContent = 'No specific requirements listed.';
+                    reqList.appendChild(li);
+                } else {
+                    reqs.forEach((r) => {
+                        const li = document.createElement('li');
+                        li.className = 'caption';
+                        li.textContent = r;
+                        reqList.appendChild(li);
+                    });
+                }
+            }
+
+            // AI Match panel pulls from the cached match-scoring result if present.
+            const m = job ? _matchByJobId[String(job._id || job.id || '')] : null;
+            const matchScoreEl = document.getElementById('modal-match-score');
+            const matchBarEl = document.getElementById('modal-match-bar');
+            const missingEl = document.getElementById('modal-missing-keywords');
+            if (matchScoreEl) matchScoreEl.textContent = m ? (m.score + '%') : '—';
+            if (matchBarEl) matchBarEl.style.width = m ? (m.score + '%') : '0%';
+            if (missingEl) {
+                if (m && m.missing && m.missing.length) {
+                    missingEl.textContent = m.missing.join(', ');
+                    missingEl.style.color = '#f87171';
+                } else if (m) {
+                    missingEl.textContent = 'No missing requirements detected.';
+                    missingEl.style.color = 'var(--accent)';
+                } else {
+                    missingEl.textContent = 'Run match scoring to see gaps.';
+                    missingEl.style.color = 'var(--text-soft, rgba(241,245,249,0.7))';
+                }
+            }
+
+            // Reset summary panel each time a new job opens.
+            const summaryText = document.getElementById('modal-summary-text');
+            const summarySource = document.getElementById('modal-summary-source');
+            if (summaryText) summaryText.textContent = '';
+            if (summarySource) summarySource.textContent = '';
+        }
+
+        function openJobModal(jobId) {
             const modal = document.getElementById('job-modal');
+            if (!modal) return;
+            const job = (_lastJobs || []).find(
+                (j) => String(j._id || j.id || '') === String(jobId || '')
+            ) || null;
+            _populateJobModal(job);
             modal.classList.add('open');
             document.body.style.overflow = 'hidden';
-            // Move focus into modal
-            setTimeout(() => modal.querySelector('.close-modal').focus(), 100);
+            setTimeout(() => {
+                const closeBtn = modal.querySelector('.close-modal');
+                if (closeBtn) closeBtn.focus();
+            }, 100);
         }
 
         function closeJobModal() {
             const modal = document.getElementById('job-modal');
+            if (!modal) return;
             modal.classList.remove('open');
             document.body.style.overflow = '';
+        }
+
+        // ── AI Summary: distilbart job-description summarization ──
+        async function runJobSummarize() {
+            const btn = document.getElementById('modal-summary-btn');
+            const out = document.getElementById('modal-summary-text');
+            const meta = document.getElementById('modal-summary-source');
+            if (!btn || !out || !meta) return;
+            const description = (_currentModalJob && _currentModalJob.description) || '';
+            if (!description.trim()) {
+                out.textContent = 'No description to summarize.';
+                meta.textContent = '';
+                return;
+            }
+            btn.disabled = true;
+            const orig = btn.innerHTML;
+            btn.innerHTML = 'Summarizing…';
+            out.textContent = 'Calling Hugging Face…';
+            meta.textContent = '';
+            try {
+                const res = await window.api.summarize(description);
+                const data = (res && res.data) || {};
+                out.textContent = data.summary || '(empty summary)';
+                if (data.source === 'huggingface') {
+                    meta.textContent = 'Generated by ' + (data.model || 'Hugging Face') + '.';
+                } else if (data.source === 'extractive') {
+                    meta.textContent = 'Extractive fallback (HF unavailable).';
+                } else {
+                    meta.textContent = '';
+                }
+            } catch (err) {
+                out.textContent = 'Summary failed: ' + (err && err.message ? err.message : 'unknown error');
+                meta.textContent = '';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = orig;
+            }
         }
 
         document.getElementById('job-modal').addEventListener('click', e => {

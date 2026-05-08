@@ -1,5 +1,6 @@
 const { extractSkillsFromText } = require('../services/skill-extraction.service');
 const { scoreCvAgainstJobs } = require('../services/match-scoring.service');
+const { summarizeText } = require('../services/summarization.service');
 const { success, error } = require('../utils/apiResponse');
 
 const MAX_INPUT_CHARS = 8000;
@@ -52,5 +53,22 @@ exports.matchScore = async (req, res) => {
     return success(res, result);
   } catch (err) {
     return error(res, err.message || 'Failed to compute match scores', err.status || 500);
+  }
+};
+
+// POST /api/ai/summarize
+// Body: { text: string, minLength?: number, maxLength?: number }
+// Returns: { summary: string, source: 'huggingface' | 'extractive' | 'empty', model?: string }
+exports.summarize = async (req, res) => {
+  try {
+    const text = typeof req.body?.text === 'string' ? req.body.text : '';
+    if (!text.trim()) return error(res, 'Field "text" is required', 400);
+    const result = await summarizeText(text.slice(0, MAX_INPUT_CHARS), {
+      minLength: req.body?.minLength,
+      maxLength: req.body?.maxLength
+    });
+    return success(res, result);
+  } catch (err) {
+    return error(res, err.message || 'Failed to summarize', err.status || 500);
   }
 };

@@ -29,11 +29,27 @@
     <!-- Three.js (3D orb only) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-    <!-- Motion (replaces GSAP — native WAAPI, 120fps, spring physics) -->
+    <!--
+      Motion One ESM bundle. The previous import path
+      (motion@latest/dist/motion.js) was removed by upstream and was throwing
+      two pageerrors on every page load. We pin to a stable major and use the
+      jsDelivr +esm shim, which auto-bundles the package as a browser ESM
+      module and is what the official Motion docs recommend.
+    -->
     <script type="module">
-        import { animate, stagger, inView, scroll } from "https://cdn.jsdelivr.net/npm/motion@latest/dist/motion.js";
-        window._motion = { animate, stagger, inView, scroll };
-        window.dispatchEvent(new Event('motion-ready'));
+        try {
+            const motion = await import('https://cdn.jsdelivr.net/npm/motion@10.18.0/+esm');
+            window._motion = {
+                animate: motion.animate,
+                stagger: motion.stagger,
+                inView: motion.inView,
+                scroll: motion.scroll
+            };
+            window.dispatchEvent(new Event('motion-ready'));
+        } catch (err) {
+            // CDN failure shouldn't break the page — animations gracefully no-op.
+            console.warn('Motion failed to load; animations disabled:', err);
+        }
     </script>
 
     <style>
@@ -1100,66 +1116,13 @@
                     <div class="skeleton skeleton-card"></div>
                 </div>
 
-                <div class="grid-layout grid-3" id="job-grid" style="display:none;">
-                    <!-- Job Card 1 -->
-                    <article class="glass-card job-card" onclick="openJobModal()" role="button" tabindex="0"
-                        aria-label="UX Visionary at Orbit Systems — 92% match" onkeydown="if(event.key==='Enter')openJobModal()">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
-                            <img src="https://picsum.photos/seed/tech1/40/40" alt="Orbit Systems logo" width="40" height="40" style="border-radius:10px;">
-                            <span class="badge badge-gold">AI Recommended</span>
-                        </div>
-                        <h3 class="card-title" style="margin-bottom:var(--space-1);">UX Visionary</h3>
-                        <p class="caption" style="margin-bottom:var(--space-4);">Orbit Systems &bull; Remote</p>
-                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
-                            <span class="badge badge-indigo">Design</span>
-                            <span class="badge badge-teal">Full-time</span>
-                        </div>
-                        <div class="progress-track" style="margin-top:var(--space-6);">
-                            <div class="progress-fill" style="width:92%;"></div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;margin-top:var(--space-2);">
-                            <span class="caption">Match Score</span>
-                            <span style="font-size:var(--text-sm);font-weight:700;color:var(--accent);">92%</span>
-                        </div>
-                    </article>
-
-                    <!-- Job Card 2 -->
-                    <article class="glass-card job-card" onclick="openJobModal()" role="button" tabindex="0"
-                        aria-label="Frontend Architect at Vertex AI" onkeydown="if(event.key==='Enter')openJobModal()">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
-                            <img src="https://picsum.photos/seed/tech2/40/40" alt="Vertex AI logo" width="40" height="40" style="border-radius:10px;">
-                            <span class="badge badge-indigo">New</span>
-                        </div>
-                        <h3 class="card-title" style="margin-bottom:var(--space-1);">Frontend Architect</h3>
-                        <p class="caption" style="margin-bottom:var(--space-4);">Vertex AI &bull; San Francisco</p>
-                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
-                            <span class="badge badge-indigo">Engineering</span>
-                            <span class="badge badge-teal">Hybrid</span>
-                        </div>
-                    </article>
-
-                    <!-- Job Card 3 -->
-                    <article class="glass-card job-card" onclick="openJobModal()" role="button" tabindex="0"
-                        aria-label="Data Scientist at DeepMind — 85% match" onkeydown="if(event.key==='Enter')openJobModal()">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
-                            <img src="https://picsum.photos/seed/tech3/40/40" alt="DeepMind logo" width="40" height="40" style="border-radius:10px;">
-                            <span class="badge badge-teal">Hot</span>
-                        </div>
-                        <h3 class="card-title" style="margin-bottom:var(--space-1);">Data Scientist</h3>
-                        <p class="caption" style="margin-bottom:var(--space-4);">DeepMind &bull; London</p>
-                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
-                            <span class="badge badge-indigo">Data</span>
-                            <span class="badge badge-teal">On-site</span>
-                        </div>
-                        <div class="progress-track" style="margin-top:var(--space-6);">
-                            <div class="progress-fill" style="width:85%;"></div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;margin-top:var(--space-2);">
-                            <span class="caption">Match Score</span>
-                            <span style="font-size:var(--text-sm);font-weight:700;color:var(--accent);">85%</span>
-                        </div>
-                    </article>
-                </div>
+                <!--
+                  Real job cards are rendered into this grid by the loadJobs() handler in
+                  Frontend/src/api.js wiring (see grid.innerHTML below). The static demo
+                  cards that used to live here were removed because they invoked
+                  openJobModal() with no jobId, which (post-PR #6) opens an empty modal.
+                -->
+                <div class="grid-layout grid-3" id="job-grid" style="display:none;"></div>
             </div>
         </section>
 
@@ -1407,6 +1370,15 @@
                         <input class="form-input" type="text" id="auth-name" name="name"
                             autocomplete="name" placeholder="Ada Lovelace">
                         <span class="field-error" id="name-error" role="alert">Name is required.</span>
+                    </div>
+
+                    <!-- Company input — only shown in register mode for recruiters; backend
+                         validator on POST /api/auth/register requires `company` for that role. -->
+                    <div class="form-group" id="auth-company-group" style="display:none;">
+                        <label class="form-label" for="auth-company">Company</label>
+                        <input class="form-input" type="text" id="auth-company" name="company"
+                            autocomplete="organization" placeholder="Acme Corp">
+                        <span class="field-error" id="company-error" role="alert">Company name is required.</span>
                     </div>
 
                     <!-- Phase 1: Properly connected labels + accessible inputs -->
@@ -2195,18 +2167,22 @@
             const btn = document.getElementById('signin-btn');
             const toggle = document.getElementById('auth-toggle-link');
             const nameGroup = document.getElementById('auth-name-group');
+            const companyGroup = document.getElementById('auth-company-group');
             if (authMode === 'register') {
                 heading.textContent = 'Create Your Account';
                 sub.textContent = 'Joining as: ' + (currentRole || 'seeker') + '.';
                 btn.textContent = 'Create Account';
                 toggle.textContent = 'Already have an account? Sign in';
                 nameGroup.style.display = '';
+                // Company is required by the backend validator only for recruiters.
+                companyGroup.style.display = currentRole === 'recruiter' ? '' : 'none';
             } else {
                 heading.textContent = 'Welcome Back';
                 sub.textContent = 'Access the nexus of talent.';
                 btn.textContent = 'Sign In';
                 toggle.textContent = 'Need an account? Create one';
                 nameGroup.style.display = 'none';
+                companyGroup.style.display = 'none';
             }
             setAuthStatus('', '');
             switchView('auth-view');
@@ -2217,9 +2193,11 @@
             const emailInput = document.getElementById('auth-email');
             const passInput = document.getElementById('auth-password');
             const nameInput = document.getElementById('auth-name');
+            const companyInput = document.getElementById('auth-company');
             const emailErr = document.getElementById('email-error');
             const passErr = document.getElementById('password-error');
             const nameErr = document.getElementById('name-error');
+            const companyErr = document.getElementById('company-error');
             const btn = document.getElementById('signin-btn');
 
             let valid = true;
@@ -2252,6 +2230,16 @@
                     nameInput.classList.remove('error');
                     nameErr.classList.remove('visible');
                 }
+                if (currentRole === 'recruiter') {
+                    if (!companyInput.value.trim()) {
+                        companyInput.classList.add('error');
+                        companyErr.classList.add('visible');
+                        valid = false;
+                    } else {
+                        companyInput.classList.remove('error');
+                        companyErr.classList.remove('visible');
+                    }
+                }
                 if (currentRole === 'admin') {
                     setAuthStatus('Admin accounts cannot self-register. Pick Job Seeker or Recruiter on the home page.', 'error');
                     valid = false;
@@ -2268,12 +2256,15 @@
 
             try {
                 if (authMode === 'register') {
-                    await api.register({
+                    const role = currentRole === 'recruiter' ? 'recruiter' : 'seeker';
+                    const payload = {
                         name: nameInput.value.trim(),
                         email: emailInput.value.trim(),
                         password: passInput.value,
-                        role: currentRole === 'recruiter' ? 'recruiter' : 'seeker'
-                    });
+                        role
+                    };
+                    if (role === 'recruiter') payload.company = companyInput.value.trim();
+                    await api.register(payload);
                     setAuthStatus('Account created. Redirecting…', 'success');
                 } else {
                     await api.login({
@@ -2309,6 +2300,10 @@
         document.getElementById('auth-name').addEventListener('input', function() {
             this.classList.remove('error');
             document.getElementById('name-error').classList.remove('visible');
+        });
+        document.getElementById('auth-company').addEventListener('input', function() {
+            this.classList.remove('error');
+            document.getElementById('company-error').classList.remove('visible');
         });
 
         // ── Kanban drag-and-drop ──

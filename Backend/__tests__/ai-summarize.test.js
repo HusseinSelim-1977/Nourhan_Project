@@ -1,5 +1,9 @@
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const app = require('../src/app');
+
+const TOKEN = jwt.sign({ id: 'test-user-1', role: 'seeker' }, process.env.JWT_SECRET);
+const withAuth = (req) => req.set('Authorization', 'Bearer ' + TOKEN);
 
 let nextResponse;
 
@@ -28,19 +32,23 @@ const longText = (
 );
 
 describe('POST /api/ai/summarize', () => {
+  it('401s without an Authorization header', async () => {
+    const res = await request(app).post('/api/ai/summarize').send({ text: 'hi' });
+    expect(res.status).toBe(401);
+  });
+
   it('400s when text is missing', async () => {
-    const res = await request(app).post('/api/ai/summarize').send({});
+    const res = await withAuth(request(app).post('/api/ai/summarize')).send({});
     expect(res.status).toBe(400);
   });
 
   it('400s when text is an empty string', async () => {
-    const res = await request(app).post('/api/ai/summarize').send({ text: '   ' });
+    const res = await withAuth(request(app).post('/api/ai/summarize')).send({ text: '   ' });
     expect(res.status).toBe(400);
   });
 
   it('returns the HF summary on the happy path and posts correct parameters', async () => {
-    const res = await request(app)
-      .post('/api/ai/summarize')
+    const res = await withAuth(request(app).post('/api/ai/summarize'))
       .send({ text: longText, minLength: 30, maxLength: 80 });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -61,7 +69,7 @@ describe('POST /api/ai/summarize', () => {
 
   it('accepts the non-array HF response shape { summary_text }', async () => {
     nextResponse = { ok: true, status: 200, body: { summary_text: 'Alt shape summary.' } };
-    const res = await request(app).post('/api/ai/summarize').send({ text: longText });
+    const res = await withAuth(request(app).post('/api/ai/summarize')).send({ text: longText });
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBe('huggingface');
     expect(res.body.data.summary).toBe('Alt shape summary.');
@@ -73,7 +81,7 @@ describe('POST /api/ai/summarize', () => {
       status: 503,
       text: async () => JSON.stringify({ error: 'Model loading' })
     }));
-    const res = await request(app).post('/api/ai/summarize').send({ text: longText });
+    const res = await withAuth(request(app).post('/api/ai/summarize')).send({ text: longText });
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBe('extractive');
     expect(res.body.data.summary.length).toBeGreaterThan(0);
@@ -82,7 +90,7 @@ describe('POST /api/ai/summarize', () => {
   });
 
   it('skips HF and returns extractive for very short input', async () => {
-    const res = await request(app).post('/api/ai/summarize').send({ text: 'Short.' });
+    const res = await withAuth(request(app).post('/api/ai/summarize')).send({ text: 'Short.' });
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBe('extractive');
     expect(res.body.data.summary).toBe('Short.');
@@ -90,8 +98,7 @@ describe('POST /api/ai/summarize', () => {
   });
 
   it('clamps min/max parameters into a sane range', async () => {
-    await request(app)
-      .post('/api/ai/summarize')
+    await withAuth(request(app).post('/api/ai/summarize'))
       .send({ text: longText, minLength: 5, maxLength: 9999 });
     const body = JSON.parse(global.fetch.mock.calls[0][1].body);
     expect(body.parameters.min_length).toBeGreaterThanOrEqual(20);

@@ -1,5 +1,11 @@
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const app = require('../src/app');
+
+// JWT for a fake authenticated seeker. The auth middleware only checks the
+// signature, so a synthetic user is fine for endpoint-level tests.
+const TOKEN = jwt.sign({ id: 'test-user-1', role: 'seeker' }, process.env.JWT_SECRET);
+const withAuth = (req) => req.set('Authorization', 'Bearer ' + TOKEN);
 
 // Mock the global fetch so tests never hit Hugging Face. Each test sets the
 // next response before triggering the request.
@@ -19,14 +25,20 @@ afterEach(() => {
 });
 
 describe('POST /api/ai/skills/extract', () => {
+  it('401s without an Authorization header', async () => {
+    const res = await request(app).post('/api/ai/skills/extract').send({ text: 'hi' });
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+  });
+
   it('400s when text is missing', async () => {
-    const res = await request(app).post('/api/ai/skills/extract').send({});
+    const res = await withAuth(request(app).post('/api/ai/skills/extract')).send({});
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
 
   it('400s when text is the empty string', async () => {
-    const res = await request(app).post('/api/ai/skills/extract').send({ text: '   ' });
+    const res = await withAuth(request(app).post('/api/ai/skills/extract')).send({ text: '   ' });
     expect(res.status).toBe(400);
   });
 
@@ -49,7 +61,7 @@ describe('POST /api/ai/skills/extract', () => {
       ]
     };
 
-    const res = await request(app).post('/api/ai/skills/extract').send({ text });
+    const res = await withAuth(request(app).post('/api/ai/skills/extract')).send({ text });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.source).toBe('huggingface');
@@ -73,7 +85,7 @@ describe('POST /api/ai/skills/extract', () => {
     });
 
     const text = 'Senior engineer with deep React, Node, and AWS experience.';
-    const res = await request(app).post('/api/ai/skills/extract').send({ text });
+    const res = await withAuth(request(app).post('/api/ai/skills/extract')).send({ text });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.source).toBe('heuristic');
@@ -85,7 +97,7 @@ describe('POST /api/ai/skills/extract', () => {
   it('attaches the bearer header when HF_API_TOKEN is set', async () => {
     process.env.HF_API_TOKEN = 'hf_test_token_123';
     nextResponse = { ok: true, status: 200, body: [] };
-    await request(app).post('/api/ai/skills/extract').send({ text: 'Hello world.' });
+    await withAuth(request(app).post('/api/ai/skills/extract')).send({ text: 'Hello world.' });
     delete process.env.HF_API_TOKEN;
 
     expect(global.fetch).toHaveBeenCalled();
@@ -95,7 +107,7 @@ describe('POST /api/ai/skills/extract', () => {
 
   it('caps very long input to keep the upstream call bounded', async () => {
     const huge = 'a'.repeat(20000);
-    await request(app).post('/api/ai/skills/extract').send({ text: huge });
+    await withAuth(request(app).post('/api/ai/skills/extract')).send({ text: huge });
     const [, opts] = global.fetch.mock.calls[0];
     const body = JSON.parse(opts.body);
     // Service caps to 8000 characters before sending upstream.

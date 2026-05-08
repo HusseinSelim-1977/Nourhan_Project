@@ -1,5 +1,9 @@
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const app = require('../src/app');
+
+const TOKEN = jwt.sign({ id: 'test-user-1', role: 'seeker' }, process.env.JWT_SECRET);
+const withAuth = (req) => req.set('Authorization', 'Bearer ' + TOKEN);
 
 let nextResponse;
 
@@ -23,21 +27,26 @@ describe('POST /api/ai/match', () => {
     { id: 'job-py',    title: 'Data Scientist',         description: 'Python, pandas, scikit-learn',     requirements: ['Python', 'pandas'] }
   ];
 
+  it('401s without an Authorization header', async () => {
+    const res = await request(app).post('/api/ai/match').send({ cvText, jobs });
+    expect(res.status).toBe(401);
+  });
+
   it('400s when cvText is missing', async () => {
-    const res = await request(app).post('/api/ai/match').send({ jobs });
+    const res = await withAuth(request(app).post('/api/ai/match')).send({ jobs });
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/cvText/);
   });
 
   it('400s when jobs is missing or empty', async () => {
-    const r1 = await request(app).post('/api/ai/match').send({ cvText });
+    const r1 = await withAuth(request(app).post('/api/ai/match')).send({ cvText });
     expect(r1.status).toBe(400);
-    const r2 = await request(app).post('/api/ai/match').send({ cvText, jobs: [] });
+    const r2 = await withAuth(request(app).post('/api/ai/match')).send({ cvText, jobs: [] });
     expect(r2.status).toBe(400);
   });
 
   it('400s when a job is missing id or description', async () => {
-    const res = await request(app).post('/api/ai/match').send({
+    const res = await withAuth(request(app).post('/api/ai/match')).send({
       cvText,
       jobs: [{ id: 'x' }]
     });
@@ -46,7 +55,7 @@ describe('POST /api/ai/match', () => {
 
   it('returns one match per job, scored 0–100, with missingRequirements', async () => {
     nextResponse = { ok: true, status: 200, body: [0.84, 0.12] };
-    const res = await request(app).post('/api/ai/match').send({ cvText, jobs });
+    const res = await withAuth(request(app).post('/api/ai/match')).send({ cvText, jobs });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.source).toBe('huggingface');
@@ -78,7 +87,7 @@ describe('POST /api/ai/match', () => {
       status: 503,
       text: async () => JSON.stringify({ error: 'Model loading' })
     }));
-    const res = await request(app).post('/api/ai/match').send({ cvText, jobs });
+    const res = await withAuth(request(app).post('/api/ai/match')).send({ cvText, jobs });
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBe('jaccard');
     expect(res.body.data.matches).toHaveLength(2);
@@ -90,7 +99,7 @@ describe('POST /api/ai/match', () => {
 
   it('clamps the score to 0 when HF returns negative similarity', async () => {
     nextResponse = { ok: true, status: 200, body: [-0.42] };
-    const res = await request(app).post('/api/ai/match').send({
+    const res = await withAuth(request(app).post('/api/ai/match')).send({
       cvText, jobs: [jobs[0]]
     });
     expect(res.status).toBe(200);
@@ -101,7 +110,7 @@ describe('POST /api/ai/match', () => {
     const many = Array.from({ length: 21 }, (_, i) => ({
       id: `j${i}`, description: 'x'
     }));
-    const res = await request(app).post('/api/ai/match').send({ cvText, jobs: many });
+    const res = await withAuth(request(app).post('/api/ai/match')).send({ cvText, jobs: many });
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/max 20/);
   });

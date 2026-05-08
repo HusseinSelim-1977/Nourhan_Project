@@ -10,8 +10,8 @@ The plan is adversarial — every step has a concrete pass/fail criterion. If a 
 
 ## Environment
 
-- Backend at `http://localhost:5000/api`, started fresh from current `feature/hf-job-summarization` HEAD (`e04c17a`) with `HF_API_TOKEN` exported. Mongo seeded with 3 jobs by `dev-bootstrap.js`.
-- Frontend served by `python3 -m http.server 8080` from `/home/ubuntu/repos/Nourhan_Project/Frontend`.
+- Backend at `http://localhost:5000/api`, started fresh from current `feature/hf-job-summarization` HEAD (`e04c17a`) with `HF_API_TOKEN` exported. Mongo seeded with 3 jobs by [`tests/e2e/dev-bootstrap.js`](../../tests/e2e/dev-bootstrap.js).
+- Frontend served by `python3 -m http.server 8080` from the repo's `Frontend/` directory.
 - Browser is the built-in Chrome on the desktop, recorded.
 
 ## Tests

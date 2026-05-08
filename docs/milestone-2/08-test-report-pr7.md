@@ -87,10 +87,13 @@ The same endpoints were re-hit in this run with a real JWT (T6 above) and produc
 
 ## How to reproduce
 
+The runner and bootstrap helpers live under `tests/e2e/` (added in PR #8). From the repo root:
+
 ```bash
-cd /home/ubuntu/repos/Nourhan_Project/Backend
-git checkout feature/hf-job-summarization   # at e04c17a
-HF_API_TOKEN=hf_xxx node /home/ubuntu/dev-bootstrap.js   # backend on :5000, seeds 3 jobs
-cd ../Frontend && python3 -m http.server 8080            # frontend on :8080
-node /tmp/pw-test/run-tests.js                           # 7-test adversarial run
+cd Backend && npm install && cd ..                       # one-time
+HF_API_TOKEN=hf_xxx node tests/e2e/dev-bootstrap.js      # backend on :5000, seeds 3 jobs
+(cd Frontend && python3 -m http.server 8080) &           # frontend on :8080
+node tests/e2e/run-tests.js                              # 7-test adversarial run
 ```
+
+The runner connects to a local Chrome that exposes CDP on `http://localhost:29229`. See [`tests/e2e/README.md`](../../tests/e2e/README.md) for full prerequisites.

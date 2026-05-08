@@ -1,36 +1,45 @@
-// One-off local smoke-test bootstrap. NOT committed.
-// Spins up mongodb-memory-server, exports MONGO_URI/JWT_SECRET, then loads server.js.
+// Local E2E bootstrap. Boots Express + mongodb-memory-server, then seeds an
+// approved demo recruiter and 3 jobs so the Jobs board has something to render.
+//
+// Resolves Backend dependencies via the repo's own Backend/node_modules so this
+// file works wherever the repo is checked out — not tied to a specific VM path.
+
 const path = require('path');
-const { MongoMemoryServer } = require(path.join(__dirname, 'repos/Nourhan_Project/Backend/node_modules/mongodb-memory-server'));
+
+const BACKEND_DIR = path.resolve(__dirname, '..', '..', 'Backend');
+const BACKEND_MODULES = path.join(BACKEND_DIR, 'node_modules');
+const fromBackend = (mod) => require(path.join(BACKEND_MODULES, mod));
+const fromBackendSrc = (rel) => require(path.join(BACKEND_DIR, rel));
+
+const { MongoMemoryServer } = fromBackend('mongodb-memory-server');
 
 (async () => {
   const mem = await MongoMemoryServer.create();
   process.env.MONGO_URI = mem.getUri();
-  process.env.JWT_SECRET = 'dev-smoke-jwt-secret-must-be-32-chars-long-yes';
-  process.env.JWT_EXPIRES_IN = '7d';
-  process.env.PORT = '5000';
-  process.env.NODE_ENV = 'development';
-  process.env.OPENAI_API_KEY = 'sk-disabled-not-used-for-this-smoke-test';
+  process.env.JWT_SECRET = process.env.JWT_SECRET || 'dev-smoke-jwt-secret-must-be-32-chars-long-yes';
+  process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+  process.env.PORT = process.env.PORT || '5000';
+  process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+  process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'sk-disabled-not-used-for-this-smoke-test';
 
-  process.chdir(path.join(__dirname, 'repos/Nourhan_Project/Backend'));
-  require(path.join(__dirname, 'repos/Nourhan_Project/Backend/server.js'));
+  process.chdir(BACKEND_DIR);
+  require(path.join(BACKEND_DIR, 'server.js'));
 
   console.log('[bootstrap] Mongo URI:', process.env.MONGO_URI);
 
-  // Seed an approved recruiter + 3 jobs after the server has booted, so the
-  // Jobs board has something to render in the live demo.
+  // Seed an approved recruiter + 3 jobs after the server has booted.
   setTimeout(async () => {
-    const mongoose = require(path.join(__dirname, 'repos/Nourhan_Project/Backend/node_modules/mongoose'));
-    const User = require(path.join(__dirname, 'repos/Nourhan_Project/Backend/src/models/User'));
-    const RecruiterProfile = require(path.join(__dirname, 'repos/Nourhan_Project/Backend/src/models/RecruiterProfile'));
-    const Job = require(path.join(__dirname, 'repos/Nourhan_Project/Backend/src/models/Job'));
+    const mongoose = fromBackend('mongoose');
+    const User = fromBackendSrc('src/models/User');
+    const RecruiterProfile = fromBackendSrc('src/models/RecruiterProfile');
+    const Job = fromBackendSrc('src/models/Job');
     if (mongoose.connection.readyState !== 1) {
       console.log('[bootstrap] mongoose not ready yet, skipping seed');
       return;
     }
     let recruiter = await User.findOne({ email: 'demo.recruiter@giu-nexus.test' });
     if (!recruiter) {
-      const bcrypt = require(path.join(__dirname, 'repos/Nourhan_Project/Backend/node_modules/bcryptjs'));
+      const bcrypt = fromBackend('bcryptjs');
       const hash = await bcrypt.hash('password123', 10);
       recruiter = await User.create({
         name: 'Demo Recruiter', email: 'demo.recruiter@giu-nexus.test',

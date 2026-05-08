@@ -28,10 +28,10 @@
 
 - **Backend:** real `Backend/server.js` against fresh `mongodb-memory-server` (`MONGOMS_VERSION=6.0.14`), JWT_SECRET set, listening on `http://localhost:5000`.
 - **Frontend:** `Frontend/index.html` served via `python3 -m http.server 8080`.
-- **Browser:** Chrome with CDP at `http://localhost:29229`, driven by `/home/ubuntu/test-runner.js` (Playwright `chromium.connectOverCDP`).
+- **Browser:** Chrome with CDP at `http://localhost:29229`, driven by an ad-hoc Playwright runner using `chromium.connectOverCDP` (this PR-#3 runner predates the in-repo [`tests/e2e/run-tests.js`](../../tests/e2e/run-tests.js), which was added later for PR #7).
 - **Seed:** one published job inserted before tests by registering a recruiter, flipping their `RecruiterProfile.approvalStatus` directly to `approved` in Mongo, then `POST /api/jobs` with their token. (Counted as setup, not an assertion.)
 
-Test plan: `/home/ubuntu/test-plan.md`. Test runner: `/home/ubuntu/test-runner.js`. Raw structured results: `/home/ubuntu/test-results.txt`.
+Test plan: [`05-test-plan-pr3.md`](./05-test-plan-pr3.md). The runner script and raw results files were ad-hoc artifacts on the test VM and are not committed.
 
 ---
 
@@ -91,7 +91,7 @@ Test plan: `/home/ubuntu/test-plan.md`. Test runner: `/home/ubuntu/test-runner.j
 
 Captured during the entire run:
 
-- 3 × pre-existing `motion.js` `pageerror`s from <ref_snippet file="/home/ubuntu/repos/Nourhan_Project/Frontend/index.html" lines="33-36" /> — unrelated to PR #3, present on `main`.
+- 3 × pre-existing `motion.js` `pageerror`s from `Frontend/index.html` lines 33–36 — unrelated to PR #3, present on `main`.
 - 1 × `console.error: Failed to load resource: the server responded with a status of 401 (Unauthorized)` — emitted by Chromium **automatically** because Test 5 deliberately submits invalid credentials. This is the browser's default behavior for any non-2xx response and is not raised from PR #3 code. It is the exact behavior Test 5 asserts.
 
 No uncaught exceptions, no rejected promises, no other `console.error`s introduced by this PR.
@@ -100,8 +100,7 @@ No uncaught exceptions, no rejected promises, no other `console.error`s introduc
 
 ## Recording
 
-Full annotated recording of the 6 tests (test_start + assertion overlays per test):
-`/home/ubuntu/screencasts/rec-79bf8606297a4e52a2e39e0b93b34dae-edited.mp4`
+Full annotated recording of the 6 tests (test_start + assertion overlays per test) was attached to the PR #3 message in the original session. The MP4 is not committed to the repo — see the PR conversation for the link.
 
 ---
 
@@ -116,8 +115,6 @@ Full annotated recording of the 6 tests (test_start + assertion overlays per tes
 
 ## Files / artifacts
 
-- Plan: `/home/ubuntu/test-plan.md`
-- Runner: `/home/ubuntu/test-runner.js`
-- Raw structured results: `/home/ubuntu/test-results.txt`
-- Screenshots: `/home/ubuntu/test-screenshots/` (11 images, 00-home through 06b-admin-register-blocked)
-- Recording: `/home/ubuntu/screencasts/rec-79bf8606297a4e52a2e39e0b93b34dae-edited.mp4`
+- Plan: [`05-test-plan-pr3.md`](./05-test-plan-pr3.md) (committed alongside this report)
+- Runner: ad-hoc Playwright script on the test VM (not committed; the canonical in-repo runner is [`tests/e2e/run-tests.js`](../../tests/e2e/run-tests.js), added later for PR #7)
+- Raw structured results, screenshots, and recording: posted as PR #3 attachments in the original session; not committed to the repo

@@ -10,6 +10,7 @@ const applicationsRoutes = require('./routes/applications.routes');
 const seekerRoutes = require('./routes/seeker.routes');
 const recruiterRoutes = require('./routes/recruiter.routes');
 const adminRoutes = require('./routes/admin.routes');
+const aiRoutes = require('./routes/ai.routes');
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use('/api/applications', applicationsRoutes);
 app.use('/api/seeker', seekerRoutes);
 app.use('/api/recruiter', recruiterRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -45,8 +47,8 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Global error handler
-app.use((err, req, res, next) => {
+// Global error handler — `next` retained for Express 4-arg signature
+app.use((err, req, res, _next) => {
   console.error(err.stack);
   const status = err.statusCode || 500;
   res.status(status).json({

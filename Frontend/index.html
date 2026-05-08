@@ -9,6 +9,12 @@
     <meta property="og:description" content="Connecting ambitious talent with visionary opportunities through AI-powered precision.">
     <meta property="og:type" content="website">
 
+    <!-- Backend API base URL. Override at deploy time, e.g. https://api.giu-nexus.com/api -->
+    <meta name="api-base" content="http://localhost:5000/api">
+
+    <!-- Tiny browser API client (auth + jobs). Loaded as a regular script. -->
+    <script src="src/api.js" defer></script>
+
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230d1117'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' font-size='18' fill='%23f59e0b'>N</text></svg>">
 
@@ -23,11 +29,27 @@
     <!-- Three.js (3D orb only) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-    <!-- Motion (replaces GSAP — native WAAPI, 120fps, spring physics) -->
+    <!--
+      Motion One ESM bundle. The previous import path
+      (motion@latest/dist/motion.js) was removed by upstream and was throwing
+      two pageerrors on every page load. We pin to a stable major and use the
+      jsDelivr +esm shim, which auto-bundles the package as a browser ESM
+      module and is what the official Motion docs recommend.
+    -->
     <script type="module">
-        import { animate, stagger, inView, scroll } from "https://cdn.jsdelivr.net/npm/motion@latest/dist/motion.js";
-        window._motion = { animate, stagger, inView, scroll };
-        window.dispatchEvent(new Event('motion-ready'));
+        try {
+            const motion = await import('https://cdn.jsdelivr.net/npm/motion@10.18.0/+esm');
+            window._motion = {
+                animate: motion.animate,
+                stagger: motion.stagger,
+                inView: motion.inView,
+                scroll: motion.scroll
+            };
+            window.dispatchEvent(new Event('motion-ready'));
+        } catch (err) {
+            // CDN failure shouldn't break the page — animations gracefully no-op.
+            console.warn('Motion failed to load; animations disabled:', err);
+        }
     </script>
 
     <style>
@@ -1063,6 +1085,30 @@
                     </div>
                 </div>
 
+                <!-- Hugging Face: CV-to-jobs semantic match (sentence-transformers/all-MiniLM-L6-v2) -->
+                <div class="glass-card" style="margin-bottom:var(--space-8);">
+                    <p class="label-text text-accent" style="margin-bottom:var(--space-3);">
+                        <ph-sparkle weight="fill" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                        Score these jobs against my CV
+                    </p>
+                    <p class="caption" style="margin-bottom:var(--space-3);">
+                        Paste a CV excerpt — Hugging Face semantic similarity (<code style="font-family:var(--font-mono);font-size:0.85em;">all-MiniLM-L6-v2</code>) returns a 0–100 match score plus the requirements you don't mention yet.
+                    </p>
+                    <textarea id="match-cv-input"
+                        aria-label="CV text for match scoring"
+                        placeholder="e.g. 5 years building React + Node.js apps, CI/CD with GitHub Actions, comfortable with PostgreSQL and AWS."
+                        rows="3"
+                        style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:var(--space-3);color:var(--text-main);font-family:var(--font-sans);font-size:var(--text-sm);resize:vertical;margin-bottom:var(--space-3);"></textarea>
+                    <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;">
+                        <button id="match-run-btn" class="btn btn-primary" type="button" onclick="runMatchScoring()">
+                            <ph-sparkle weight="bold" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                            Score Jobs
+                        </button>
+                        <button id="match-clear-btn" class="btn" type="button" onclick="clearMatchScores()" style="background:rgba(255,255,255,0.06);color:var(--text-main);">Clear</button>
+                        <span id="match-run-status" class="caption" role="status" aria-live="polite"></span>
+                    </div>
+                </div>
+
                 <!-- Phase 3: Skeleton loaders shown briefly, then real cards -->
                 <div class="grid-layout grid-3" id="job-grid-skeleton" aria-hidden="true">
                     <div class="skeleton skeleton-card"></div>
@@ -1070,66 +1116,13 @@
                     <div class="skeleton skeleton-card"></div>
                 </div>
 
-                <div class="grid-layout grid-3" id="job-grid" style="display:none;">
-                    <!-- Job Card 1 -->
-                    <article class="glass-card job-card" onclick="openJobModal()" role="button" tabindex="0"
-                        aria-label="UX Visionary at Orbit Systems — 92% match" onkeydown="if(event.key==='Enter')openJobModal()">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
-                            <img src="https://picsum.photos/seed/tech1/40/40" alt="Orbit Systems logo" width="40" height="40" style="border-radius:10px;">
-                            <span class="badge badge-gold">AI Recommended</span>
-                        </div>
-                        <h3 class="card-title" style="margin-bottom:var(--space-1);">UX Visionary</h3>
-                        <p class="caption" style="margin-bottom:var(--space-4);">Orbit Systems &bull; Remote</p>
-                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
-                            <span class="badge badge-indigo">Design</span>
-                            <span class="badge badge-teal">Full-time</span>
-                        </div>
-                        <div class="progress-track" style="margin-top:var(--space-6);">
-                            <div class="progress-fill" style="width:92%;"></div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;margin-top:var(--space-2);">
-                            <span class="caption">Match Score</span>
-                            <span style="font-size:var(--text-sm);font-weight:700;color:var(--accent);">92%</span>
-                        </div>
-                    </article>
-
-                    <!-- Job Card 2 -->
-                    <article class="glass-card job-card" onclick="openJobModal()" role="button" tabindex="0"
-                        aria-label="Frontend Architect at Vertex AI" onkeydown="if(event.key==='Enter')openJobModal()">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
-                            <img src="https://picsum.photos/seed/tech2/40/40" alt="Vertex AI logo" width="40" height="40" style="border-radius:10px;">
-                            <span class="badge badge-indigo">New</span>
-                        </div>
-                        <h3 class="card-title" style="margin-bottom:var(--space-1);">Frontend Architect</h3>
-                        <p class="caption" style="margin-bottom:var(--space-4);">Vertex AI &bull; San Francisco</p>
-                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
-                            <span class="badge badge-indigo">Engineering</span>
-                            <span class="badge badge-teal">Hybrid</span>
-                        </div>
-                    </article>
-
-                    <!-- Job Card 3 -->
-                    <article class="glass-card job-card" onclick="openJobModal()" role="button" tabindex="0"
-                        aria-label="Data Scientist at DeepMind — 85% match" onkeydown="if(event.key==='Enter')openJobModal()">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">
-                            <img src="https://picsum.photos/seed/tech3/40/40" alt="DeepMind logo" width="40" height="40" style="border-radius:10px;">
-                            <span class="badge badge-teal">Hot</span>
-                        </div>
-                        <h3 class="card-title" style="margin-bottom:var(--space-1);">Data Scientist</h3>
-                        <p class="caption" style="margin-bottom:var(--space-4);">DeepMind &bull; London</p>
-                        <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">
-                            <span class="badge badge-indigo">Data</span>
-                            <span class="badge badge-teal">On-site</span>
-                        </div>
-                        <div class="progress-track" style="margin-top:var(--space-6);">
-                            <div class="progress-fill" style="width:85%;"></div>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;margin-top:var(--space-2);">
-                            <span class="caption">Match Score</span>
-                            <span style="font-size:var(--text-sm);font-weight:700;color:var(--accent);">85%</span>
-                        </div>
-                    </article>
-                </div>
+                <!--
+                  Real job cards are rendered into this grid by the loadJobs() handler in
+                  Frontend/src/api.js wiring (see grid.innerHTML below). The static demo
+                  cards that used to live here were removed because they invoked
+                  openJobModal() with no jobId, which (post-PR #6) opens an empty modal.
+                -->
+                <div class="grid-layout grid-3" id="job-grid" style="display:none;"></div>
             </div>
         </section>
 
@@ -1153,6 +1146,21 @@
                                     <ph-sparkle weight="fill" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
                                     AI Skill Extract
                                 </p>
+                                <p class="caption" style="margin-bottom:var(--space-3);">
+                                    Paste the body of your CV — Hugging Face NER (<code style="font-family:var(--font-mono);font-size:0.85em;">jjzha/jobbert_skill_extraction</code>) tags every skill mention.
+                                </p>
+                                <textarea id="skill-extract-input"
+                                    aria-label="CV text for AI skill extraction"
+                                    placeholder="e.g. Built React + TypeScript dashboards on Node.js. Experience with PostgreSQL, Docker, and AWS Lambda."
+                                    rows="4"
+                                    style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);border-radius:8px;padding:var(--space-3);color:var(--text-main);font-family:var(--font-sans);font-size:var(--text-sm);resize:vertical;margin-bottom:var(--space-3);"></textarea>
+                                <div style="display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;margin-bottom:var(--space-4);">
+                                    <button id="skill-extract-btn" class="btn btn-primary" type="button" onclick="runSkillExtraction()">
+                                        <ph-sparkle weight="bold" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                                        Extract Skills
+                                    </button>
+                                    <span id="skill-extract-status" class="caption" role="status" aria-live="polite"></span>
+                                </div>
                                 <div id="skill-container" aria-live="polite"></div>
                             </div>
                         </div>
@@ -1353,8 +1361,25 @@
             <div class="glass-card auth-split" style="width:100%;max-width:900px;padding:0;display:flex;overflow:hidden;min-height:580px;border-radius:20px;">
                 <!-- Form side -->
                 <div style="flex:1;padding:var(--space-12);display:flex;flex-direction:column;justify-content:center;">
-                    <h2 style="font-size:var(--text-3xl);margin-bottom:var(--space-2);">Welcome Back</h2>
-                    <p class="caption" style="margin-bottom:var(--space-8);">Access the nexus of talent.</p>
+                    <h2 id="auth-heading" style="font-size:var(--text-3xl);margin-bottom:var(--space-2);">Welcome Back</h2>
+                    <p id="auth-subheading" class="caption" style="margin-bottom:var(--space-8);">Access the nexus of talent.</p>
+
+                    <!-- Name input — only used in register mode -->
+                    <div class="form-group" id="auth-name-group" style="display:none;">
+                        <label class="form-label" for="auth-name">Full name</label>
+                        <input class="form-input" type="text" id="auth-name" name="name"
+                            autocomplete="name" placeholder="Ada Lovelace">
+                        <span class="field-error" id="name-error" role="alert">Name is required.</span>
+                    </div>
+
+                    <!-- Company input — only shown in register mode for recruiters; backend
+                         validator on POST /api/auth/register requires `company` for that role. -->
+                    <div class="form-group" id="auth-company-group" style="display:none;">
+                        <label class="form-label" for="auth-company">Company</label>
+                        <input class="form-input" type="text" id="auth-company" name="company"
+                            autocomplete="organization" placeholder="Acme Corp">
+                        <span class="field-error" id="company-error" role="alert">Company name is required.</span>
+                    </div>
 
                     <!-- Phase 1: Properly connected labels + accessible inputs -->
                     <div class="form-group">
@@ -1370,15 +1395,21 @@
                         <span class="field-error" id="password-error" role="alert">Password must be at least 8 characters.</span>
                     </div>
 
+                    <!-- API status (success / error from backend) -->
+                    <div id="auth-status" role="status" aria-live="polite"
+                        style="display:none;margin-bottom:var(--space-4);padding:0.75rem 1rem;border-radius:8px;font-size:var(--text-sm);"></div>
+
                     <!-- Phase 3: Loading state on submit -->
                     <button class="btn btn-gold" id="signin-btn" style="width:100%;padding:1rem;margin-bottom:var(--space-4);"
-                        onclick="handleSignIn(event)">
+                        onclick="handleAuthSubmit(event)">
                         Sign In
                     </button>
                     <div style="text-align:center;">
-                        <a href="#" class="caption" style="color:var(--text-muted);text-decoration:none;transition:color 0.2s;"
+                        <a href="#" class="caption" id="auth-toggle-link"
+                            style="color:var(--text-muted);text-decoration:none;transition:color 0.2s;"
+                            onclick="setAuthMode(authMode === 'login' ? 'register' : 'login'); event.preventDefault();"
                             onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='var(--text-muted)'">
-                            Forgot password?
+                            Need an account? Create one
                         </a>
                     </div>
                 </div>
@@ -1390,7 +1421,8 @@
                         <p class="caption" style="margin-bottom:var(--space-8);max-width:28ch;margin-left:auto;margin-right:auto;">
                             Join the network defining the future workforce.
                         </p>
-                        <button class="btn" style="background:white;color:var(--bg-deep);font-weight:700;">
+                        <button class="btn" style="background:white;color:var(--bg-deep);font-weight:700;"
+                            onclick="setAuthMode('register')">
                             Create Account
                         </button>
                     </div>
@@ -1410,21 +1442,28 @@
             </button>
             <div class="grid-layout grid-2" style="gap:var(--space-8);">
                 <div>
-                    <h2 id="modal-job-title" style="font-size:var(--text-3xl);margin-bottom:var(--space-3);">UX Visionary</h2>
-                    <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-6);">
-                        <span class="badge badge-indigo">Design</span>
-                        <span class="badge badge-gold">$120k – $150k</span>
-                        <span class="badge badge-teal">Remote</span>
+                    <h2 id="modal-job-title" style="font-size:var(--text-3xl);margin-bottom:var(--space-3);">Job title</h2>
+                    <p id="modal-job-company" class="caption" style="margin-bottom:var(--space-3);">Company &bull; Location</p>
+                    <div id="modal-job-badges" style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-6);"></div>
+
+                    <!-- Hugging Face: AI summary expander (sshleifer/distilbart-cnn-12-6) -->
+                    <div class="glass-card" style="border-color:rgba(13,148,136,0.3);margin-bottom:var(--space-6);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+                            <p class="label-text text-accent" style="margin:0;">
+                                <ph-sparkle weight="fill" style="vertical-align:middle;margin-right:4px;"></ph-sparkle>
+                                AI Summary
+                            </p>
+                            <button id="modal-summary-btn" class="btn btn-primary" type="button" onclick="runJobSummarize()" style="padding:0.5rem 1rem;font-size:var(--text-sm);">Generate Summary</button>
+                        </div>
+                        <p id="modal-summary-text" class="caption" style="margin-top:var(--space-3);min-height:1em;"></p>
+                        <p id="modal-summary-source" class="caption" style="margin-top:var(--space-2);font-size:0.75rem;opacity:0.7;"></p>
                     </div>
-                    <p class="body-text text-muted" style="margin-bottom:var(--space-6);">
-                        We are looking for a visionary mind to redefine how users interact with spatial computing interfaces. You will lead the design system for our next-gen AR platform.
-                    </p>
+
+                    <h4 class="label-text" style="margin-bottom:var(--space-3);">Description</h4>
+                    <p id="modal-job-description" class="body-text text-muted" style="margin-bottom:var(--space-6);white-space:pre-wrap;"></p>
+
                     <h4 class="label-text" style="margin-bottom:var(--space-3);">Requirements</h4>
-                    <ul style="padding-left:1.2rem;display:flex;flex-direction:column;gap:var(--space-2);">
-                        <li class="caption">5+ years in Product Design</li>
-                        <li class="caption">Proficiency in 3D tools (Spline, Blender)</li>
-                        <li class="caption">Strong portfolio in motion design</li>
-                    </ul>
+                    <ul id="modal-job-requirements" style="padding-left:1.2rem;display:flex;flex-direction:column;gap:var(--space-2);"></ul>
                 </div>
                 <div>
                     <div class="glass-card" style="border-color:rgba(245,158,11,0.3);margin-bottom:var(--space-4);">
@@ -1435,13 +1474,13 @@
                         <div style="margin-bottom:var(--space-4);">
                             <div style="display:flex;justify-content:space-between;margin-bottom:var(--space-2);">
                                 <span class="caption">Profile Match</span>
-                                <span style="font-family:var(--font-serif);font-weight:700;font-size:var(--text-xl);color:var(--accent);">92%</span>
+                                <span id="modal-match-score" style="font-family:var(--font-serif);font-weight:700;font-size:var(--text-xl);color:var(--accent);">—</span>
                             </div>
-                            <div class="progress-track"><div class="progress-fill" style="width:92%;"></div></div>
+                            <div class="progress-track"><div id="modal-match-bar" class="progress-fill" style="width:0%;"></div></div>
                         </div>
                         <div>
                             <p class="label-text" style="margin-bottom:var(--space-2);">Missing Keywords</p>
-                            <p style="font-family:var(--font-sans);font-size:var(--text-sm);color:#f87171;">WebGL, React Three Fiber</p>
+                            <p id="modal-missing-keywords" style="font-family:var(--font-sans);font-size:var(--text-sm);color:#f87171;">Run match scoring to see gaps.</p>
                         </div>
                     </div>
                     <button class="btn btn-gold" style="width:100%;padding:1rem;">
@@ -1578,9 +1617,9 @@
             history.replaceState(null, '', hash);
 
             // View-specific triggers
-            if (viewId === 'seeker-dash') { populateSkills(); animateCounters(); }
+            if (viewId === 'seeker-dash') { populateSkills(); animateCounters(); _restoreCvText(); }
             if (viewId === 'admin-dash') animateCounters();
-            if (viewId === 'job-board') showJobsWithSkeleton();
+            if (viewId === 'job-board') { showJobsWithSkeleton(); _restoreCvText(); }
         }
 
         // Handle back/forward + direct URL load
@@ -1653,18 +1692,249 @@
             switchView(map[currentRole] || 'seeker-dash');
         }
 
-        // ── Phase 3: Job board skeleton → real cards ──
-        function showJobsWithSkeleton() {
+        // ── Job board: skeleton → real cards from /api/jobs ──
+        function escapeHtml(str) {
+            return String(str == null ? '' : str)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // Holds the latest match-scoring result keyed by job id, so re-rendering
+        // (e.g. after sort) preserves the badges. Cleared by clearMatchScores().
+        const _matchByJobId = Object.create(null);
+
+        function renderJobCard(job) {
+            const id = escapeHtml(job._id || job.id || '');
+            const title = escapeHtml(job.title);
+            const company = escapeHtml(job.company);
+            const location = escapeHtml(job.location);
+            const type = escapeHtml(job.type || 'full-time');
+            const category = escapeHtml(job.category || 'Engineering');
+            const seed = encodeURIComponent(job.company || 'job');
+            const match = _matchByJobId[job._id || job.id || ''];
+            const ariaSuffix = match ? (' \u2014 ' + match.score + '% match') : '';
+            const matchHtml = match ? [
+                '  <div class="progress-track" style="margin-top:var(--space-6);">',
+                '    <div class="progress-fill" style="width:', match.score, '%;"></div>',
+                '  </div>',
+                '  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-2);">',
+                '    <span class="caption">AI Match (HF semantic)</span>',
+                '    <span style="font-size:var(--text-sm);font-weight:700;color:var(--accent);">', match.score, '%</span>',
+                '  </div>',
+                match.missing && match.missing.length
+                  ? '  <p class="caption" style="margin-top:var(--space-2);">Missing: ' + match.missing.map(escapeHtml).join(', ') + '</p>'
+                  : ''
+            ].join('') : '';
+            return [
+                '<article class="glass-card job-card" role="button" tabindex="0"',
+                '  data-job-id="', id, '"',
+                '  aria-label="', title, ' at ', company, ariaSuffix, '"',
+                '  onclick="openJobModal(\'', id, '\')" onkeydown="if(event.key===\'Enter\')openJobModal(\'', id, '\')">',
+                '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);">',
+                '    <img src="https://picsum.photos/seed/', seed, '/40/40" alt="', company, ' logo" width="40" height="40" style="border-radius:10px;">',
+                match
+                  ? '    <span class="badge badge-gold">' + match.score + '% Match</span>'
+                  : '    <span class="badge badge-teal">' + type + '</span>',
+                '  </div>',
+                '  <h3 class="card-title" style="margin-bottom:var(--space-1);">', title, '</h3>',
+                '  <p class="caption" style="margin-bottom:var(--space-4);">', company, ' &bull; ', location, '</p>',
+                '  <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;">',
+                '    <span class="badge badge-indigo">', category, '</span>',
+                '  </div>',
+                matchHtml,
+                '</article>'
+            ].join('');
+        }
+
+        // Holds the most recent fetched jobs so the match button can re-use
+        // them without an extra GET /api/jobs round-trip.
+        let _lastJobs = [];
+
+        async function showJobsWithSkeleton() {
             const skeleton = document.getElementById('job-grid-skeleton');
             const grid = document.getElementById('job-grid');
             if (!skeleton || !grid) return;
             skeleton.style.display = 'grid';
             grid.style.display = 'none';
-            const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            setTimeout(() => {
+
+            try {
+                const res = await api.getJobs({ limit: 12 });
+                const jobs = (res && res.data && res.data.jobs) || [];
+                _lastJobs = jobs;
+                grid.innerHTML = jobs.length
+                    ? jobs.map(renderJobCard).join('')
+                    : '<p class="caption" style="grid-column:1/-1;text-align:center;">No active jobs yet — check back soon.</p>';
+            } catch (err) {
+                console.warn('Could not load jobs from backend:', err.message);
+                grid.innerHTML =
+                    '<p class="caption" style="grid-column:1/-1;text-align:center;">' +
+                    'Could not reach the GIU Nexus API. Showing nothing for now — please retry.' +
+                    '</p>';
+            } finally {
                 skeleton.style.display = 'none';
                 grid.style.display = 'grid';
-            }, prefersReduced ? 0 : 600);
+            }
+        }
+
+        // ── AI Match Scoring: paste CV text → POST /api/ai/match ──
+        // Re-renders the loaded job cards with a "X% Match" badge driven by
+        // Hugging Face semantic similarity, plus a "Missing:" caption listing
+        // the requirements not covered by the CV.
+        const CV_TEXT_KEY = 'giu-nexus.cv-text';
+
+        function _restoreCvText() {
+            try {
+                const stored = window.localStorage.getItem(CV_TEXT_KEY);
+                if (!stored) return;
+                const t1 = document.getElementById('match-cv-input');
+                const t2 = document.getElementById('skill-extract-input');
+                if (t1 && !t1.value) t1.value = stored;
+                if (t2 && !t2.value) t2.value = stored;
+            } catch (_e) { /* localStorage may be disabled in some contexts */ }
+        }
+
+        function _persistCvText(text) {
+            try { window.localStorage.setItem(CV_TEXT_KEY, text); } catch (_e) { /* noop */ }
+        }
+
+        async function runMatchScoring() {
+            const ta = document.getElementById('match-cv-input');
+            const status = document.getElementById('match-run-status');
+            const btn = document.getElementById('match-run-btn');
+            const grid = document.getElementById('job-grid');
+            if (!ta || !status || !btn || !grid) return;
+            const cvText = (ta.value || '').trim();
+            if (!cvText) {
+                status.textContent = 'Paste CV text first.';
+                status.style.color = 'var(--accent)';
+                return;
+            }
+            if (!_lastJobs || _lastJobs.length === 0) {
+                status.textContent = 'No jobs loaded — try refreshing.';
+                status.style.color = 'var(--accent)';
+                return;
+            }
+            _persistCvText(cvText);
+            btn.disabled = true;
+            const orig = btn.innerHTML;
+            btn.innerHTML = 'Scoring…';
+            status.textContent = 'Calling Hugging Face…';
+            status.style.color = 'var(--text-soft, rgba(241,245,249,0.7))';
+            try {
+                const payload = {
+                    cvText: cvText,
+                    jobs: _lastJobs.slice(0, 20).map((j) => ({
+                        id: j._id || j.id,
+                        title: j.title || '',
+                        description: j.description || j.title || '',
+                        requirements: Array.isArray(j.requirements) ? j.requirements : []
+                    }))
+                };
+                const res = await window.api.matchScore(payload);
+                const data = (res && res.data) || {};
+                const matches = Array.isArray(data.matches) ? data.matches : [];
+                for (const key of Object.keys(_matchByJobId)) delete _matchByJobId[key];
+                matches.forEach((m) => {
+                    _matchByJobId[String(m.jobId)] = {
+                        score: m.score,
+                        missing: Array.isArray(m.missingRequirements) ? m.missingRequirements : []
+                    };
+                });
+                grid.innerHTML = _lastJobs.map(renderJobCard).join('');
+                const label = data.source === 'huggingface'
+                    ? `Scored ${matches.length} job${matches.length === 1 ? '' : 's'} via ${data.model || 'Hugging Face'}.`
+                    : `Scored ${matches.length} job${matches.length === 1 ? '' : 's'} (Jaccard fallback — HF unavailable).`;
+                status.textContent = label;
+                status.style.color = data.source === 'huggingface' ? 'var(--accent)' : 'var(--text-soft, rgba(241,245,249,0.7))';
+            } catch (err) {
+                status.textContent = 'Match scoring failed: ' + (err && err.message ? err.message : 'unknown error');
+                status.style.color = '#f87171';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = orig;
+            }
+        }
+
+        function clearMatchScores() {
+            const grid = document.getElementById('job-grid');
+            const status = document.getElementById('match-run-status');
+            for (const key of Object.keys(_matchByJobId)) delete _matchByJobId[key];
+            if (grid && _lastJobs.length) grid.innerHTML = _lastJobs.map(renderJobCard).join('');
+            if (status) { status.textContent = ''; status.style.color = ''; }
+        }
+
+        // ── AI Skill Extract: paste CV text → POST /api/ai/skills/extract ──
+        // Renders the response into #skill-container using the same .skill-chip
+        // styling the placeholder uses, so the panel shape never changes.
+        function escapeText(value) {
+            const div = document.createElement('div');
+            div.textContent = String(value == null ? '' : value);
+            return div.innerHTML;
+        }
+
+        function renderSkillChips(skills, options) {
+            const container = document.getElementById('skill-container');
+            if (!container) return;
+            container.innerHTML = '';
+            const aiMagic = !!(options && options.aiMagic);
+            (skills || []).forEach((skill, i) => {
+                const chip = document.createElement('span');
+                chip.className = `skill-chip${aiMagic ? ' ai-magic' : ''}`;
+                chip.innerHTML = escapeText(skill);
+                container.appendChild(chip);
+                const { animate } = window._motion || {};
+                const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                if (!prefersReduced && animate) {
+                    animate(chip,
+                        { opacity: [0, 1], scale: [0.85, 1] },
+                        { duration: 0.4, delay: i * 0.06, easing: [0.34, 1.56, 0.64, 1] }
+                    );
+                } else {
+                    chip.style.opacity = '1';
+                    chip.style.transform = 'scale(1)';
+                }
+            });
+        }
+
+        async function runSkillExtraction() {
+            const ta = document.getElementById('skill-extract-input');
+            const status = document.getElementById('skill-extract-status');
+            const btn = document.getElementById('skill-extract-btn');
+            if (!ta || !status || !btn) return;
+            const text = (ta.value || '').trim();
+            if (!text) {
+                status.textContent = 'Paste CV text first.';
+                status.style.color = 'var(--accent)';
+                return;
+            }
+            _persistCvText(text);
+            btn.disabled = true;
+            const origLabel = btn.innerHTML;
+            btn.innerHTML = 'Extracting…';
+            status.textContent = 'Calling Hugging Face…';
+            status.style.color = 'var(--text-soft, rgba(241,245,249,0.7))';
+            try {
+                const res = await window.api.extractSkills(text);
+                const data = (res && res.data) || {};
+                const skills = Array.isArray(data.skills) ? data.skills : [];
+                renderSkillChips(skills, { aiMagic: data.source === 'huggingface' });
+                if (skills.length === 0) {
+                    status.textContent = 'No skills detected. Try a longer or more technical excerpt.';
+                    status.style.color = 'var(--accent)';
+                } else {
+                    const label = data.source === 'huggingface'
+                        ? `Extracted ${skills.length} skill${skills.length === 1 ? '' : 's'} via ${data.model || 'Hugging Face'}.`
+                        : `Extracted ${skills.length} skill${skills.length === 1 ? '' : 's'} (heuristic fallback — HF unavailable).`;
+                    status.textContent = label;
+                    status.style.color = data.source === 'huggingface' ? 'var(--accent)' : 'var(--text-soft, rgba(241,245,249,0.7))';
+                }
+            } catch (err) {
+                status.textContent = 'Skill extraction failed: ' + (err && err.message ? err.message : 'unknown error');
+                status.style.color = '#f87171';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origLabel;
+            }
         }
 
         // ── Motion: skill chips stagger ──
@@ -1729,36 +1999,209 @@
         }
 
         // ── Modal ──
-        function openJobModal() {
+        // Tracks which job is currently rendered in the modal so the AI
+        // Summary button knows which description to send to /api/ai/summarize.
+        let _currentModalJob = null;
+
+        function _setModalText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(value == null ? '' : value);
+        }
+
+        function _populateJobModal(job) {
+            _currentModalJob = job || null;
+            _setModalText('modal-job-title', (job && job.title) || 'Untitled role');
+            const subtitle = ((job && job.company) || '') + ((job && job.location) ? ' \u2022 ' + job.location : '');
+            _setModalText('modal-job-company', subtitle);
+            _setModalText('modal-job-description', (job && job.description) || 'No description provided.');
+
+            const badges = document.getElementById('modal-job-badges');
+            if (badges) {
+                badges.innerHTML = '';
+                const tags = [];
+                if (job && job.category) tags.push({ cls: 'badge-indigo', text: job.category });
+                if (job && job.type) tags.push({ cls: 'badge-teal', text: job.type });
+                if (job && job.salary) tags.push({ cls: 'badge-gold', text: job.salary });
+                tags.forEach((t) => {
+                    const span = document.createElement('span');
+                    span.className = 'badge ' + t.cls;
+                    span.textContent = t.text;
+                    badges.appendChild(span);
+                });
+            }
+
+            const reqList = document.getElementById('modal-job-requirements');
+            if (reqList) {
+                reqList.innerHTML = '';
+                const reqs = (job && Array.isArray(job.requirements)) ? job.requirements : [];
+                if (reqs.length === 0) {
+                    const li = document.createElement('li');
+                    li.className = 'caption';
+                    li.textContent = 'No specific requirements listed.';
+                    reqList.appendChild(li);
+                } else {
+                    reqs.forEach((r) => {
+                        const li = document.createElement('li');
+                        li.className = 'caption';
+                        li.textContent = r;
+                        reqList.appendChild(li);
+                    });
+                }
+            }
+
+            // AI Match panel pulls from the cached match-scoring result if present.
+            const m = job ? _matchByJobId[String(job._id || job.id || '')] : null;
+            const matchScoreEl = document.getElementById('modal-match-score');
+            const matchBarEl = document.getElementById('modal-match-bar');
+            const missingEl = document.getElementById('modal-missing-keywords');
+            if (matchScoreEl) matchScoreEl.textContent = m ? (m.score + '%') : '—';
+            if (matchBarEl) matchBarEl.style.width = m ? (m.score + '%') : '0%';
+            if (missingEl) {
+                if (m && m.missing && m.missing.length) {
+                    missingEl.textContent = m.missing.join(', ');
+                    missingEl.style.color = '#f87171';
+                } else if (m) {
+                    missingEl.textContent = 'No missing requirements detected.';
+                    missingEl.style.color = 'var(--accent)';
+                } else {
+                    missingEl.textContent = 'Run match scoring to see gaps.';
+                    missingEl.style.color = 'var(--text-soft, rgba(241,245,249,0.7))';
+                }
+            }
+
+            // Reset summary panel each time a new job opens.
+            const summaryText = document.getElementById('modal-summary-text');
+            const summarySource = document.getElementById('modal-summary-source');
+            if (summaryText) summaryText.textContent = '';
+            if (summarySource) summarySource.textContent = '';
+        }
+
+        function openJobModal(jobId) {
             const modal = document.getElementById('job-modal');
+            if (!modal) return;
+            const job = (_lastJobs || []).find(
+                (j) => String(j._id || j.id || '') === String(jobId || '')
+            ) || null;
+            _populateJobModal(job);
             modal.classList.add('open');
             document.body.style.overflow = 'hidden';
-            // Move focus into modal
-            setTimeout(() => modal.querySelector('.close-modal').focus(), 100);
+            setTimeout(() => {
+                const closeBtn = modal.querySelector('.close-modal');
+                if (closeBtn) closeBtn.focus();
+            }, 100);
         }
 
         function closeJobModal() {
             const modal = document.getElementById('job-modal');
+            if (!modal) return;
             modal.classList.remove('open');
             document.body.style.overflow = '';
+        }
+
+        // ── AI Summary: distilbart job-description summarization ──
+        async function runJobSummarize() {
+            const btn = document.getElementById('modal-summary-btn');
+            const out = document.getElementById('modal-summary-text');
+            const meta = document.getElementById('modal-summary-source');
+            if (!btn || !out || !meta) return;
+            const description = (_currentModalJob && _currentModalJob.description) || '';
+            if (!description.trim()) {
+                out.textContent = 'No description to summarize.';
+                meta.textContent = '';
+                return;
+            }
+            btn.disabled = true;
+            const orig = btn.innerHTML;
+            btn.innerHTML = 'Summarizing…';
+            out.textContent = 'Calling Hugging Face…';
+            meta.textContent = '';
+            try {
+                const res = await window.api.summarize(description);
+                const data = (res && res.data) || {};
+                out.textContent = data.summary || '(empty summary)';
+                if (data.source === 'huggingface') {
+                    meta.textContent = 'Generated by ' + (data.model || 'Hugging Face') + '.';
+                } else if (data.source === 'extractive') {
+                    meta.textContent = 'Extractive fallback (HF unavailable).';
+                } else {
+                    meta.textContent = '';
+                }
+            } catch (err) {
+                out.textContent = 'Summary failed: ' + (err && err.message ? err.message : 'unknown error');
+                meta.textContent = '';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = orig;
+            }
         }
 
         document.getElementById('job-modal').addEventListener('click', e => {
             if (e.target.id === 'job-modal') closeJobModal();
         });
 
-        // ── Phase 1: Form validation ──
-        function handleSignIn(e) {
+        // ── Auth: real API wiring (login + register) ──
+        let authMode = 'login'; // 'login' | 'register'
+
+        function setAuthStatus(message, kind) {
+            const el = document.getElementById('auth-status');
+            if (!el) return;
+            if (!message) {
+                el.style.display = 'none';
+                el.textContent = '';
+                return;
+            }
+            const palette = kind === 'error'
+                ? { bg: 'rgba(239, 68, 68, 0.12)', fg: '#fca5a5', border: 'rgba(239, 68, 68, 0.4)' }
+                : { bg: 'rgba(13, 148, 136, 0.12)', fg: '#5eead4', border: 'rgba(13, 148, 136, 0.4)' };
+            el.style.display = 'block';
+            el.style.background = palette.bg;
+            el.style.color = palette.fg;
+            el.style.border = '1px solid ' + palette.border;
+            el.textContent = message;
+        }
+
+        function setAuthMode(mode) {
+            authMode = mode === 'register' ? 'register' : 'login';
+            const heading = document.getElementById('auth-heading');
+            const sub = document.getElementById('auth-subheading');
+            const btn = document.getElementById('signin-btn');
+            const toggle = document.getElementById('auth-toggle-link');
+            const nameGroup = document.getElementById('auth-name-group');
+            const companyGroup = document.getElementById('auth-company-group');
+            if (authMode === 'register') {
+                heading.textContent = 'Create Your Account';
+                sub.textContent = 'Joining as: ' + (currentRole || 'seeker') + '.';
+                btn.textContent = 'Create Account';
+                toggle.textContent = 'Already have an account? Sign in';
+                nameGroup.style.display = '';
+                // Company is required by the backend validator only for recruiters.
+                companyGroup.style.display = currentRole === 'recruiter' ? '' : 'none';
+            } else {
+                heading.textContent = 'Welcome Back';
+                sub.textContent = 'Access the nexus of talent.';
+                btn.textContent = 'Sign In';
+                toggle.textContent = 'Need an account? Create one';
+                nameGroup.style.display = 'none';
+                companyGroup.style.display = 'none';
+            }
+            setAuthStatus('', '');
+            switchView('auth-view');
+        }
+
+        async function handleAuthSubmit(e) {
             e.preventDefault();
             const emailInput = document.getElementById('auth-email');
             const passInput = document.getElementById('auth-password');
+            const nameInput = document.getElementById('auth-name');
+            const companyInput = document.getElementById('auth-company');
             const emailErr = document.getElementById('email-error');
             const passErr = document.getElementById('password-error');
+            const nameErr = document.getElementById('name-error');
+            const companyErr = document.getElementById('company-error');
             const btn = document.getElementById('signin-btn');
 
             let valid = true;
 
-            // Validate email
             const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRe.test(emailInput.value.trim())) {
                 emailInput.classList.add('error');
@@ -1769,7 +2212,6 @@
                 emailErr.classList.remove('visible');
             }
 
-            // Validate password
             if (passInput.value.length < 8) {
                 passInput.classList.add('error');
                 passErr.classList.add('visible');
@@ -1779,16 +2221,71 @@
                 passErr.classList.remove('visible');
             }
 
+            if (authMode === 'register') {
+                if (!nameInput.value.trim()) {
+                    nameInput.classList.add('error');
+                    nameErr.classList.add('visible');
+                    valid = false;
+                } else {
+                    nameInput.classList.remove('error');
+                    nameErr.classList.remove('visible');
+                }
+                if (currentRole === 'recruiter') {
+                    if (!companyInput.value.trim()) {
+                        companyInput.classList.add('error');
+                        companyErr.classList.add('visible');
+                        valid = false;
+                    } else {
+                        companyInput.classList.remove('error');
+                        companyErr.classList.remove('visible');
+                    }
+                }
+                if (currentRole === 'admin') {
+                    setAuthStatus('Admin accounts cannot self-register. Pick Job Seeker or Recruiter on the home page.', 'error');
+                    valid = false;
+                }
+            }
+
             if (!valid) return;
 
-            // Phase 3: Loading state
+            const originalLabel = btn.textContent;
             btn.classList.add('loading');
-            btn.textContent = 'Signing in';
-            setTimeout(() => {
+            btn.disabled = true;
+            btn.textContent = authMode === 'register' ? 'Creating account…' : 'Signing in…';
+            setAuthStatus('', '');
+
+            try {
+                if (authMode === 'register') {
+                    const role = currentRole === 'recruiter' ? 'recruiter' : 'seeker';
+                    const payload = {
+                        name: nameInput.value.trim(),
+                        email: emailInput.value.trim(),
+                        password: passInput.value,
+                        role
+                    };
+                    if (role === 'recruiter') payload.company = companyInput.value.trim();
+                    await api.register(payload);
+                    setAuthStatus('Account created. Redirecting…', 'success');
+                } else {
+                    await api.login({
+                        email: emailInput.value.trim(),
+                        password: passInput.value
+                    });
+                    setAuthStatus('Signed in. Redirecting…', 'success');
+                }
+                const map = { seeker: 'seeker-dash', recruiter: 'recruiter-dash', admin: 'admin-dash' };
+                const nextView = map[currentRole] || 'seeker-dash';
+                setTimeout(() => switchView(nextView), 600);
+            } catch (err) {
+                const msg = err && err.network
+                    ? 'Could not reach the GIU Nexus API. Is the backend running?'
+                    : (err && err.message) || 'Something went wrong. Please try again.';
+                setAuthStatus(msg, 'error');
+            } finally {
                 btn.classList.remove('loading');
-                btn.textContent = 'Sign In';
-                switchView('seeker-dash');
-            }, 1500);
+                btn.disabled = false;
+                btn.textContent = originalLabel;
+            }
         }
 
         // Clear error on input
@@ -1799,6 +2296,14 @@
         document.getElementById('auth-password').addEventListener('input', function() {
             this.classList.remove('error');
             document.getElementById('password-error').classList.remove('visible');
+        });
+        document.getElementById('auth-name').addEventListener('input', function() {
+            this.classList.remove('error');
+            document.getElementById('name-error').classList.remove('visible');
+        });
+        document.getElementById('auth-company').addEventListener('input', function() {
+            this.classList.remove('error');
+            document.getElementById('company-error').classList.remove('visible');
         });
 
         // ── Kanban drag-and-drop ──
